@@ -1,0 +1,121 @@
+﻿@page "/"
+@using System.Net.Http.Json
+@using BlazorWasmBrasilApiCep.Models
+@inject HttpClient Http
+
+<PageTitle>Consulta de CEP</PageTitle>
+
+<div class="container mt-4" style="max-width: 600px;">
+    <h3 class="mb-3">Consulta de CEP</h3>
+
+    <div class="input-group mb-3">
+        <input type="text" 
+               class="form-control" 
+               placeholder="Digite o CEP (ex: 30493170)" 
+               @bind="cepInput" 
+               @bind:event="oninput"
+               @onkeyup="TratarKeyPress" 
+               maxlength="9" />
+        <button class="btn btn-primary" type="button" @onclick="BuscarCep" disabled="@isSearching">
+            @if (isSearching)
+            {
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                <span>Buscando...</span>
+            }
+            else
+            {
+                <span>Buscar</span>
+            }
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            @errorMessage
+        </div>
+    }
+
+    @if (dadosCep != null)
+    {
+        <div class="card mt-3 shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">Resultado</h5>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item"><strong>CEP:</strong> @dadosCep.cep</li>
+                <li class="list-group-item"><strong>Logradouro:</strong> @dadosCep.street</li>
+                <li class="list-group-item"><strong>Bairro:</strong> @dadosCep.neighborhood</li>
+                <li class="list-group-item"><strong>Cidade/UF:</strong> @dadosCep.city / @dadosCep.state</li>
+                <li class="list-group-item"><strong>Serviço:</strong> @dadosCep.service</li>
+                @if (dadosCep.ibge != null)
+                {
+                    <li class="list-group-item bg-light">
+                        <strong>IBGE:</strong><br />
+                        <small>Cidade: @dadosCep.ibge.city | UF: @dadosCep.ibge.state</small>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</div>
+
+@code {
+    private string cepInput = string.Empty;
+    private Cep? dadosCep;
+    private string? errorMessage;
+    private bool isSearching;
+
+    private async Task BuscarCep()
+    {
+        errorMessage = null;
+        dadosCep = null;
+
+        var cepLimpo = new string((cepInput ?? string.Empty).Where(char.IsDigit).ToArray());
+
+        if (cepLimpo.Length != 8)
+        {
+            errorMessage = "Por favor, digite um CEP válido com 8 dígitos.";
+            return;
+        }
+
+        isSearching = true;
+
+        try
+        {
+            // URL montada diretamente com o CEP
+            string url = "https://brasilapi.com.br/api/cep/v2/" + cepLimpo;
+
+            var response = await Http.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
+            {
+                dadosCep = await response.Content.ReadFromJsonAsync<Cep>();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                errorMessage = "CEP não encontrado.";
+            }
+            else
+            {
+                errorMessage = $"Erro na API: {(int)response.StatusCode}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Ocorreu um erro: {ex.Message}";
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private async Task TratarKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await BuscarCep();
+        }
+    }
+}
